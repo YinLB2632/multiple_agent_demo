@@ -1,0 +1,21 @@
+# AI Product Team - dependencies
+# Install: pip install -r requirements.txt
+
+# Multi-agent orchestration engine
+langgraph>=0.2.50,<0.3
+langchain-core>=0.3.0,<0.4
+
+# LLM access (domestic models via OpenAI-compatible API)
+langchain-openai>=0.2.0,<0.4
+
+# Web UI
+streamlit>=1.36.0
+
+# Load .env config
+python-dotenv>=1.0.0
+
+# Web search (REST, needs only requests)
+requests>=2.31.0
+
+# Tests
+pytest>=8.0.0
