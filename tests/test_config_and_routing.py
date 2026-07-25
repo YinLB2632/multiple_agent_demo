@@ -39,6 +39,71 @@ def test_build_llm_missing_key_raises(monkeypatch):
     assert "API Key" in str(exc.value)
 
 
+# ---------- 自定义模型中转站 ----------
+
+def test_custom_provider_requires_model_for_settings(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "custom")
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    with pytest.raises(ValueError) as exc:
+        load_settings()
+    assert "LLM_MODEL" in str(exc.value)
+
+
+def test_custom_provider_settings_ok_when_model_set(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "custom")
+    monkeypatch.setenv("LLM_MODEL", "gpt-4o")
+    s = load_settings()
+    assert s.llm_provider == "custom"
+    assert s.llm_model == "gpt-4o"
+
+
+def test_build_llm_custom_missing_base_url_raises(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "custom")
+    monkeypatch.setenv("LLM_MODEL", "gpt-4o")
+    monkeypatch.setenv("CUSTOM_API_KEY", "sk-xxx")
+    monkeypatch.delenv("CUSTOM_BASE_URL", raising=False)
+    with pytest.raises(ValueError) as exc:
+        build_llm()
+    assert "CUSTOM_BASE_URL" in str(exc.value)
+
+
+def test_build_llm_custom_missing_key_raises(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "custom")
+    monkeypatch.setenv("LLM_MODEL", "gpt-4o")
+    monkeypatch.setenv("CUSTOM_BASE_URL", "https://proxy.example.com/v1")
+    monkeypatch.delenv("CUSTOM_API_KEY", raising=False)
+    with pytest.raises(ValueError) as exc:
+        build_llm()
+    assert "CUSTOM_API_KEY" in str(exc.value)
+
+
+def test_build_llm_custom_missing_model_raises(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "custom")
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.setenv("CUSTOM_BASE_URL", "https://proxy.example.com/v1")
+    monkeypatch.setenv("CUSTOM_API_KEY", "sk-xxx")
+    with pytest.raises(ValueError) as exc:
+        build_llm()
+    assert "LLM_MODEL" in str(exc.value)
+
+
+def test_build_llm_custom_builds_client(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "custom")
+    monkeypatch.setenv("LLM_MODEL", "gpt-4o")
+    monkeypatch.setenv("CUSTOM_BASE_URL", "https://proxy.example.com/v1")
+    monkeypatch.setenv("CUSTOM_API_KEY", "sk-xxx")
+    llm = build_llm()
+    assert llm.model_name == "gpt-4o"
+    assert str(llm.openai_api_base) == "https://proxy.example.com/v1"
+
+
+def test_unknown_provider_error_mentions_custom(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "火星模型")
+    with pytest.raises(ValueError) as exc:
+        load_settings()
+    assert "custom" in str(exc.value)
+
+
 # ---------- 路由 ----------
 
 def test_route_after_clarify_enough_goes_to_brief():

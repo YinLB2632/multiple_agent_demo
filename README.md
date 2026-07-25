@@ -76,6 +76,21 @@ TAVILY_API_KEY=你的key          # 免费额度每月 1000 次，tavily.com
 | `zhipu` | 智谱 GLM | glm-4-flash | open.bigmodel.cn |
 | `moonshot` | Kimi | moonshot-v1-8k | platform.moonshot.cn |
 | `openai` | OpenAI | gpt-4o-mini | 需自备网络 |
+| `custom` | 你自己的模型中转站 | 你指定 | 见下 |
+
+### 用自己的模型中转站
+
+如果你用的是自建/第三方的模型代理服务（一般是 OpenAI 兼容接口），
+在 `.env` 里这样配：
+
+```
+LLM_PROVIDER=custom
+CUSTOM_BASE_URL=https://你的中转站地址/v1
+CUSTOM_API_KEY=中转站给你的key
+LLM_MODEL=中转站要求的模型名，比如 gpt-4o 或 claude-3-5-sonnet
+```
+
+三项都必填，缺一个会在启动时给出明确的中文报错，不会静默失败。
 
 ## 常用调整
 

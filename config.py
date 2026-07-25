@@ -43,6 +43,10 @@ _PROVIDERS: dict[str, dict[str, str]] = {
     },
 }
 
+# 特殊 provider：用户自接的模型中转站（代理/聚合服务）。
+# 与上面固定表不同，它的 base_url / model 也来自环境变量，而非硬编码。
+_CUSTOM_PROVIDER = "custom"
+
 
 def _int_env(name: str, default: int) -> int:
     """读取整数配置，非法值时回退到默认，绝不因配置写错而崩溃。"""
@@ -68,13 +72,21 @@ class Settings:
 def load_settings() -> Settings:
     """从环境变量装配 Settings（不可变，避免运行中被误改）。"""
     provider = os.getenv("LLM_PROVIDER", "deepseek").strip().lower()
-    if provider not in _PROVIDERS:
+    if provider == _CUSTOM_PROVIDER:
+        # 自定义中转站：模型名必填，没有内置默认值可回退
+        model = os.getenv("LLM_MODEL", "").strip()
+        if not model:
+            raise ValueError(
+                "LLM_PROVIDER=custom 时必须填写 LLM_MODEL（中转站要求的模型名）"
+            )
+    elif provider not in _PROVIDERS:
         raise ValueError(
             f"不认识的 LLM_PROVIDER：{provider!r}。"
-            f"可选：{', '.join(_PROVIDERS)}"
+            f"可选：{', '.join(_PROVIDERS)}, {_CUSTOM_PROVIDER}"
         )
+    else:
+        model = os.getenv("LLM_MODEL", "").strip() or _PROVIDERS[provider]["default_model"]
 
-    model = os.getenv("LLM_MODEL", "").strip() or _PROVIDERS[provider]["default_model"]
     search = os.getenv("SEARCH_PROVIDER", "tavily").strip().lower()
 
     return Settings(
@@ -91,12 +103,35 @@ def build_llm(temperature: float = 0.4) -> ChatOpenAI:
     """按当前配置创建大模型客户端。
 
     国产模型基本都提供 OpenAI 兼容接口，所以统一用 ChatOpenAI 接入。
+    provider=custom 时，base_url / model / key 全部来自用户自填的环境变量，
+    用于接入自建或第三方的模型中转站。
     缺少 key 时抛出中文提示，而不是让底层库报一堆英文栈。
     """
     provider = os.getenv("LLM_PROVIDER", "deepseek").strip().lower()
+
+    if provider == _CUSTOM_PROVIDER:
+        base_url = os.getenv("CUSTOM_BASE_URL", "").strip()
+        api_key = os.getenv("CUSTOM_API_KEY", "").strip()
+        model = os.getenv("LLM_MODEL", "").strip()
+        if not base_url:
+            raise ValueError("LLM_PROVIDER=custom 时必须填写 CUSTOM_BASE_URL（中转站接口地址）")
+        if not api_key:
+            raise ValueError("LLM_PROVIDER=custom 时必须填写 CUSTOM_API_KEY（中转站的 key）")
+        if not model:
+            raise ValueError("LLM_PROVIDER=custom 时必须填写 LLM_MODEL（中转站要求的模型名）")
+        return ChatOpenAI(
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            temperature=temperature,
+            timeout=120,
+            max_retries=2,
+        )
+
     if provider not in _PROVIDERS:
         raise ValueError(
-            f"不认识的 LLM_PROVIDER：{provider!r}。可选：{', '.join(_PROVIDERS)}"
+            f"不认识的 LLM_PROVIDER：{provider!r}。"
+            f"可选：{', '.join(_PROVIDERS)}, {_CUSTOM_PROVIDER}"
         )
 
     conf = _PROVIDERS[provider]

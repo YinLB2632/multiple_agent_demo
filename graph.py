@@ -3,21 +3,34 @@
 流程（两个"你说了算"的关口）：
 
   START
-    ↓
-  clarify_generate  判断信息够不够
-    ↓ 不够                    ↓ 够了
-  collect_answers【关口1】     make_brief  整理需求简报
-    ↑ 回答后回到判断            ↓
-    └──────────────────────  confirm_brief【关口2】人工审阅/编辑/确认
-                               ↓ 确认后才进入耗时环节
-                             research   联网调研
-                               ↓
-                             write_prd  撰写 PRD
-                               ↓
-                             review_prd 评审打分
-                               ↓ 不合格且没超返修上限 → 回 write_prd
-                               ↓ 合格或到上限
-                             END
+    │
+    ▼
+  clarify_generate ──不够──► collect_answers【关口1：回答问题】
+    │  ▲                              │
+    │  └───────────回答后回到判断───────┘
+    │
+    ▼ 够了
+  make_brief   整理需求简报
+    │
+    ▼
+  confirm_brief【关口2：人工审阅/编辑/确认，确认后才进入耗时环节】
+    │
+    ▼
+  do_research  联网调研
+    │
+    ▼
+  write_prd ◄──────────────┐  撰写 / 按评审意见返修 PRD
+    │                      │
+    ▼                      │
+  review_prd  评审打分      │
+    │                      │
+    └──不合格且没超返修上限──┘
+    │
+    ▼ 合格或到返修上限
+  END
+
+注意：collect_answers 只会跳回 clarify_generate 重新判断信息是否够，
+不会流向 confirm_brief——两个关口分别把守两段不同的循环，互不相通。
 """
 from __future__ import annotations
 
