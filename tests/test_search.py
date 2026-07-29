@@ -1,5 +1,5 @@
 """测试联网搜索的优雅降级——没 key、配置 none 时都不能崩。"""
-from tools.search import web_search, SearchResult, _format_items
+from tools.search import web_search, SearchResult, format_items
 
 
 def test_search_none_provider(monkeypatch):
@@ -30,7 +30,7 @@ def test_search_bocha_missing_key_degrades(monkeypatch):
 
 def test_format_items():
     items = [{"title": "某APP", "content": "记账工具", "url": "http://x.com"}]
-    out = _format_items(items)
+    out = format_items(items)
     assert "某APP" in out
     assert "记账工具" in out
     assert "http://x.com" in out

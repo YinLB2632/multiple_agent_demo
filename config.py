@@ -15,7 +15,7 @@ load_dotenv()
 
 
 # 各家国产模型的 OpenAI 兼容接入信息：默认模型、接口地址、key 的环境变量名
-_PROVIDERS: dict[str, dict[str, str]] = {
+PROVIDERS: dict[str, dict[str, str]] = {
     "deepseek": {
         "base_url": "https://api.deepseek.com/v1",
         "default_model": "deepseek-chat",
@@ -45,10 +45,10 @@ _PROVIDERS: dict[str, dict[str, str]] = {
 
 # 特殊 provider：用户自接的模型中转站（代理/聚合服务）。
 # 与上面固定表不同，它的 base_url / model 也来自环境变量，而非硬编码。
-_CUSTOM_PROVIDER = "custom"
+CUSTOM_PROVIDER = "custom"
 
 
-def _int_env(name: str, default: int) -> int:
+def read_int_env(name: str, default: int) -> int:
     """读取整数配置，非法值时回退到默认，绝不因配置写错而崩溃。"""
     raw = os.getenv(name, "").strip()
     try:
@@ -72,20 +72,20 @@ class Settings:
 def load_settings() -> Settings:
     """从环境变量装配 Settings（不可变，避免运行中被误改）。"""
     provider = os.getenv("LLM_PROVIDER", "deepseek").strip().lower()
-    if provider == _CUSTOM_PROVIDER:
+    if provider == CUSTOM_PROVIDER:
         # 自定义中转站：模型名必填，没有内置默认值可回退
         model = os.getenv("LLM_MODEL", "").strip()
         if not model:
             raise ValueError(
                 "LLM_PROVIDER=custom 时必须填写 LLM_MODEL（中转站要求的模型名）"
             )
-    elif provider not in _PROVIDERS:
+    elif provider not in PROVIDERS:
         raise ValueError(
             f"不认识的 LLM_PROVIDER：{provider!r}。"
-            f"可选：{', '.join(_PROVIDERS)}, {_CUSTOM_PROVIDER}"
+            f"可选：{', '.join(PROVIDERS)}, {CUSTOM_PROVIDER}"
         )
     else:
-        model = os.getenv("LLM_MODEL", "").strip() or _PROVIDERS[provider]["default_model"]
+        model = os.getenv("LLM_MODEL", "").strip() or PROVIDERS[provider]["default_model"]
 
     search = os.getenv("SEARCH_PROVIDER", "tavily").strip().lower()
 
@@ -93,9 +93,9 @@ def load_settings() -> Settings:
         llm_provider=provider,
         llm_model=model,
         search_provider=search,
-        prd_pass_score=_int_env("PRD_PASS_SCORE", 80),
-        max_revision_rounds=_int_env("MAX_REVISION_ROUNDS", 2),
-        max_clarify_rounds=_int_env("MAX_CLARIFY_ROUNDS", 2),
+        prd_pass_score=read_int_env("PRD_PASS_SCORE", 80),
+        max_revision_rounds=read_int_env("MAX_REVISION_ROUNDS", 2),
+        max_clarify_rounds=read_int_env("MAX_CLARIFY_ROUNDS", 2),
     )
 
 
@@ -109,7 +109,7 @@ def build_llm(temperature: float = 0.4) -> ChatOpenAI:
     """
     provider = os.getenv("LLM_PROVIDER", "deepseek").strip().lower()
 
-    if provider == _CUSTOM_PROVIDER:
+    if provider == CUSTOM_PROVIDER:
         base_url = os.getenv("CUSTOM_BASE_URL", "").strip()
         api_key = os.getenv("CUSTOM_API_KEY", "").strip()
         model = os.getenv("LLM_MODEL", "").strip()
@@ -128,13 +128,13 @@ def build_llm(temperature: float = 0.4) -> ChatOpenAI:
             max_retries=2,
         )
 
-    if provider not in _PROVIDERS:
+    if provider not in PROVIDERS:
         raise ValueError(
             f"不认识的 LLM_PROVIDER：{provider!r}。"
-            f"可选：{', '.join(_PROVIDERS)}, {_CUSTOM_PROVIDER}"
+            f"可选：{', '.join(PROVIDERS)}, {CUSTOM_PROVIDER}"
         )
 
-    conf = _PROVIDERS[provider]
+    conf = PROVIDERS[provider]
     api_key = os.getenv(conf["key_env"], "").strip()
     if not api_key:
         raise ValueError(

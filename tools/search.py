@@ -13,9 +13,9 @@ from dataclasses import dataclass, field
 import requests
 
 # 搜索超时（秒）。设常量，避免魔数散落。
-_TIMEOUT = 20
+SEARCH_TIMEOUT = 20
 # 每个关键词取回的结果条数
-_MAX_RESULTS = 5
+MAX_RESULTS = 5
 
 
 @dataclass
@@ -28,17 +28,17 @@ class SearchResult:
     items: list[dict] = field(default_factory=list)  # 原始条目，备查
 
 
-def _tavily_search(query: str, api_key: str) -> list[dict]:
+def tavily_search(query: str, api_key: str) -> list[dict]:
     """调用 Tavily 搜索接口，返回标准化条目列表。"""
     resp = requests.post(
         "https://api.tavily.com/search",
         json={
             "api_key": api_key,
             "query": query,
-            "max_results": _MAX_RESULTS,
+            "max_results": MAX_RESULTS,
             "search_depth": "basic",
         },
-        timeout=_TIMEOUT,
+        timeout=SEARCH_TIMEOUT,
     )
     resp.raise_for_status()
     data = resp.json()
@@ -52,13 +52,13 @@ def _tavily_search(query: str, api_key: str) -> list[dict]:
     ]
 
 
-def _bocha_search(query: str, api_key: str) -> list[dict]:
+def bocha_search(query: str, api_key: str) -> list[dict]:
     """调用博查 AI 搜索接口，返回标准化条目列表。"""
     resp = requests.post(
         "https://api.bochaai.com/v1/web-search",
         headers={"Authorization": f"Bearer {api_key}"},
-        json={"query": query, "count": _MAX_RESULTS, "summary": True},
-        timeout=_TIMEOUT,
+        json={"query": query, "count": MAX_RESULTS, "summary": True},
+        timeout=SEARCH_TIMEOUT,
     )
     resp.raise_for_status()
     data = resp.json()
@@ -78,7 +78,7 @@ def _bocha_search(query: str, api_key: str) -> list[dict]:
     ]
 
 
-def _format_items(items: list[dict]) -> str:
+def format_items(items: list[dict]) -> str:
     """把搜索条目拼成喂给大模型的可读文本。"""
     lines: list[str] = []
     for i, it in enumerate(items, 1):
@@ -115,9 +115,9 @@ def web_search(queries: list[str]) -> SearchResult:
             if not q.strip():
                 continue
             if provider == "tavily":
-                all_items.extend(_tavily_search(q, api_key))
+                all_items.extend(tavily_search(q, api_key))
             elif provider == "bocha":
-                all_items.extend(_bocha_search(q, api_key))
+                all_items.extend(bocha_search(q, api_key))
             else:
                 return SearchResult(
                     online=False,
@@ -135,4 +135,4 @@ def web_search(queries: list[str]) -> SearchResult:
     if not all_items:
         return SearchResult(online=False, text="", note="搜索无结果，降级为基于已有知识")
 
-    return SearchResult(online=True, text=_format_items(all_items), items=all_items)
+    return SearchResult(online=True, text=format_items(all_items), items=all_items)
