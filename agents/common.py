@@ -14,17 +14,42 @@ from langchain_core.messages import HumanMessage
 from config import build_llm
 
 
+def extract_text(content: Any) -> str:
+    """把 LLM 返回的 content 字段规整成纯文本。
+
+    多模态/新版 chat 模型有时不会直接给字符串，而是给一个内容块列表
+    （如 [{"type": "text", "text": "..."}]）；content 也可能是 None。
+    这里统一拼出可读文本，避免下游把 "None" 或 Python repr 当成正文使用。
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                # block.get("text", "") 遇到 "text": null 仍会返回 None；
+                # str(None) 会产生字符串 "None"，用 or "" 彻底堵死这个漏洞
+                parts.append(block.get("text") or "")
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts)
+    return str(content)
+
+
 def call_llm(prompt: str, temperature: float = 0.4) -> str:
     """发一条 prompt，拿回纯文本回复。"""
     llm = build_llm(temperature=temperature)
     resp = llm.invoke([HumanMessage(content=prompt)])
-    return resp.content if isinstance(resp.content, str) else str(resp.content)
+    return extract_text(resp.content)
 
 
 def parse_json(text: str) -> dict[str, Any]:
     """从模型输出里尽力抠出第一个 JSON 对象。
 
-    解析失败时返回空 dict，由调用方决定降级策略，不抛异常。
+    解析失败、或解析出来不是 dict（模型返回了数组/字符串/null 等合法但
+    非对象的 JSON）时统一返回空 dict，由调用方决定降级策略，不抛异常。
     """
     if not text:
         return {}
@@ -35,7 +60,8 @@ def parse_json(text: str) -> dict[str, Any]:
 
     # 直接尝试
     try:
-        return json.loads(candidate)
+        parsed = json.loads(candidate)
+        return parsed if isinstance(parsed, dict) else {}
     except json.JSONDecodeError:
         pass
 
@@ -44,7 +70,8 @@ def parse_json(text: str) -> dict[str, Any]:
     end = candidate.rfind("}")
     if start != -1 and end != -1 and end > start:
         try:
-            return json.loads(candidate[start : end + 1])
+            parsed = json.loads(candidate[start : end + 1])
+            return parsed if isinstance(parsed, dict) else {}
         except json.JSONDecodeError:
             return {}
     return {}

@@ -100,6 +100,17 @@ def web_search(queries: list[str]) -> SearchResult:
     if provider == "none":
         return SearchResult(online=False, text="", note="已配置为不联网（SEARCH_PROVIDER=none）")
 
+    # 未知 provider 必须在推导 key_env 之前就拦截。
+    # 如果先推导 key_env，未知 provider 会被当成 bocha 去读 BOCHA_API_KEY；
+    # 一旦该 key 没配，会提前返回"未配置 BOCHA_API_KEY"，而不是"不认识的 provider"，
+    # 给出误导性诊断。把这个检查前置，让错误信息和真实原因对应。
+    if provider not in ("tavily", "bocha"):
+        return SearchResult(
+            online=False,
+            text="",
+            note=f"不认识的 SEARCH_PROVIDER：{provider}",
+        )
+
     key_env = "TAVILY_API_KEY" if provider == "tavily" else "BOCHA_API_KEY"
     api_key = os.getenv(key_env, "").strip()
     if not api_key:
@@ -116,16 +127,12 @@ def web_search(queries: list[str]) -> SearchResult:
                 continue
             if provider == "tavily":
                 all_items.extend(tavily_search(q, api_key))
-            elif provider == "bocha":
-                all_items.extend(bocha_search(q, api_key))
             else:
-                return SearchResult(
-                    online=False,
-                    text="",
-                    note=f"不认识的 SEARCH_PROVIDER：{provider}",
-                )
-    except (requests.RequestException, ValueError, KeyError) as exc:
-        # 网络问题、超时、返回体异常等：一律降级，保证流水线继续跑
+                all_items.extend(bocha_search(q, api_key))
+    except (requests.RequestException, ValueError, KeyError, AttributeError, TypeError) as exc:
+        # 网络问题、超时、返回体异常等：一律降级，保证流水线继续跑。
+        # AttributeError/TypeError 覆盖搜索提供商返回非 dict body 的情况
+        # （如 JSON 数组/null），此时 data.get(...) 会直接抛出。
         return SearchResult(
             online=False,
             text="",

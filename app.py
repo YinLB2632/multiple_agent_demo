@@ -88,6 +88,9 @@ def start_run(requirement: str) -> None:
 def resume_run(resume_value) -> None:
     """把用户在关口的输入交回流水线，继续往下跑。"""
     graph = st.session_state.graph
+    # 每次重新提交前清掉上一次的错误：如果上轮失败、这轮成功，
+    # 旧 error 会一直挂在页面上，用户以为还在出错，实际上已经好了。
+    st.session_state.error = None
     try:
         stream = graph.stream(
             Command(resume=resume_value), make_run_config(), stream_mode="updates"
@@ -135,7 +138,12 @@ with st.sidebar:
     )
     st.divider()
     if st.button("🔄 重新开始"):
-        for k in ["phase", "logs", "interrupt", "result", "error"]:
+        # clarify_attempt 不能 pop（归零会让下一轮重用相同的 ans_{attempt}_{i} 键，
+        # Streamlit 会用 session_state 里残留的旧答案预填新问题）。
+        # 正确做法：保持计数器单调递增，同时显式删掉本次残留的 ans_* 键。
+        # graph 也清掉，让 init_session 重建干净的 MemorySaver 线程状态。
+        stale_keys = [k for k in st.session_state if k.startswith("ans_")]
+        for k in ["phase", "logs", "interrupt", "result", "error", "graph"] + stale_keys:
             st.session_state.pop(k, None)
         st.rerun()
 

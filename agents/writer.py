@@ -8,12 +8,14 @@ from state import PRDState
 
 def write_prd(state: PRDState) -> PRDState:
     """撰写或返修 PRD。带上上一轮评审意见做针对性改进。"""
-    feedback = state.get("review_feedback", "").strip()
+
+    # 用 or "" 把 None 和空字符串统一归一化。
+    feedback = (state.get("review_feedback") or "").strip()
     round_no = state.get("revision_round", 0)
 
     prompt = WRITER_PROMPT.format(
-        brief=state.get("brief", ""),
-        research=state.get("research", ""),
+        brief=state.get("brief") or "",
+        research=state.get("research") or "",
         review_feedback=feedback or "（首次撰写，暂无评审意见）",
     )
     prd = call_llm(prompt, temperature=0.5).strip()

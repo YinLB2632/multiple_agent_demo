@@ -54,9 +54,17 @@ class PRDState(TypedDict, total=False):
 
 
 def initial_state(raw_requirement: str) -> PRDState:
-    """根据用户输入构造初始状态，把计数器等都归零。"""
+    """根据用户输入构造初始状态，把计数器等都归零。
+
+    空白需求在这里快速失败：空字符串喂进流水线会让每一个节点都拿到无意义的
+    输入，最终静默产出一堆垃圾内容，远不如在入口处直接报错来得清晰。
+    """
+    requirement = raw_requirement.strip()
+    if not requirement:
+        raise ValueError("需求不能为空，请描述你的产品想法")
+
     return {
-        "raw_requirement": raw_requirement.strip(),
+        "raw_requirement": requirement,
         "clarify_round": 0,
         "pending_questions": [],
         "qa_history": [],

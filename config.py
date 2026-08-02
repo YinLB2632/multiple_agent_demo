@@ -67,18 +67,35 @@ class Settings:
     prd_pass_score: int
     max_revision_rounds: int
     max_clarify_rounds: int
+    # 仅 custom provider 使用；其他 provider 为空字符串（不存 None，让类型保持干净）
+    custom_base_url: str = ""
+    custom_api_key: str = ""
+
+
+SUPPORTED_SEARCH_PROVIDERS = {"tavily", "bocha", "none"}
 
 
 def load_settings() -> Settings:
-    """从环境变量装配 Settings（不可变，避免运行中被误改）。"""
+    """从环境变量装配 Settings（不可变，避免运行中被误改）。
+
+    所有 provider 相关字段都在这里一次性校验，失败立即抛出中文提示，
+    不留到实际调用时才报错（fail-fast 原则）。
+    """
     provider = os.getenv("LLM_PROVIDER", "deepseek").strip().lower()
+    custom_base_url = ""
+    custom_api_key = ""
+
     if provider == CUSTOM_PROVIDER:
-        # 自定义中转站：模型名必填，没有内置默认值可回退
         model = os.getenv("LLM_MODEL", "").strip()
+        custom_base_url = os.getenv("CUSTOM_BASE_URL", "").strip()
+        custom_api_key = os.getenv("CUSTOM_API_KEY", "").strip()
+        # 自定义中转站三个字段都是必填，缺任何一个就没法发请求，提前报
         if not model:
-            raise ValueError(
-                "LLM_PROVIDER=custom 时必须填写 LLM_MODEL（中转站要求的模型名）"
-            )
+            raise ValueError("LLM_PROVIDER=custom 时必须填写 LLM_MODEL（中转站要求的模型名）")
+        if not custom_base_url:
+            raise ValueError("LLM_PROVIDER=custom 时必须填写 CUSTOM_BASE_URL（中转站接口地址）")
+        if not custom_api_key:
+            raise ValueError("LLM_PROVIDER=custom 时必须填写 CUSTOM_API_KEY（中转站的 key）")
     elif provider not in PROVIDERS:
         raise ValueError(
             f"不认识的 LLM_PROVIDER：{provider!r}。"
@@ -88,6 +105,12 @@ def load_settings() -> Settings:
         model = os.getenv("LLM_MODEL", "").strip() or PROVIDERS[provider]["default_model"]
 
     search = os.getenv("SEARCH_PROVIDER", "tavily").strip().lower()
+    # 搜索 provider 也在这里校验，避免等到真正搜索时才发现配置有误
+    if search not in SUPPORTED_SEARCH_PROVIDERS:
+        raise ValueError(
+            f"不认识的 SEARCH_PROVIDER：{search!r}。"
+            f"可选：{', '.join(sorted(SUPPORTED_SEARCH_PROVIDERS))}"
+        )
 
     return Settings(
         llm_provider=provider,
@@ -96,6 +119,8 @@ def load_settings() -> Settings:
         prd_pass_score=read_int_env("PRD_PASS_SCORE", 80),
         max_revision_rounds=read_int_env("MAX_REVISION_ROUNDS", 2),
         max_clarify_rounds=read_int_env("MAX_CLARIFY_ROUNDS", 2),
+        custom_base_url=custom_base_url,
+        custom_api_key=custom_api_key,
     )
 
 
@@ -105,33 +130,21 @@ def build_llm(temperature: float = 0.4) -> ChatOpenAI:
     国产模型基本都提供 OpenAI 兼容接口，所以统一用 ChatOpenAI 接入。
     provider=custom 时，base_url / model / key 全部来自用户自填的环境变量，
     用于接入自建或第三方的模型中转站。
-    缺少 key 时抛出中文提示，而不是让底层库报一堆英文栈。
+
+    直接复用 load_settings() 的解析结果，避免在两处各自重新读环境变量——
+    以前两处逻辑分开维护，很容易出现"Settings 里的值和实际建的客户端对不上"。
     """
-    provider = os.getenv("LLM_PROVIDER", "deepseek").strip().lower()
+    settings = load_settings()
+    provider = settings.llm_provider
 
     if provider == CUSTOM_PROVIDER:
-        base_url = os.getenv("CUSTOM_BASE_URL", "").strip()
-        api_key = os.getenv("CUSTOM_API_KEY", "").strip()
-        model = os.getenv("LLM_MODEL", "").strip()
-        if not base_url:
-            raise ValueError("LLM_PROVIDER=custom 时必须填写 CUSTOM_BASE_URL（中转站接口地址）")
-        if not api_key:
-            raise ValueError("LLM_PROVIDER=custom 时必须填写 CUSTOM_API_KEY（中转站的 key）")
-        if not model:
-            raise ValueError("LLM_PROVIDER=custom 时必须填写 LLM_MODEL（中转站要求的模型名）")
         return ChatOpenAI(
-            model=model,
-            api_key=api_key,
-            base_url=base_url,
+            model=settings.llm_model,
+            api_key=settings.custom_api_key,
+            base_url=settings.custom_base_url,
             temperature=temperature,
             timeout=120,
             max_retries=2,
-        )
-
-    if provider not in PROVIDERS:
-        raise ValueError(
-            f"不认识的 LLM_PROVIDER：{provider!r}。"
-            f"可选：{', '.join(PROVIDERS)}, {CUSTOM_PROVIDER}"
         )
 
     conf = PROVIDERS[provider]
@@ -142,9 +155,8 @@ def build_llm(temperature: float = 0.4) -> ChatOpenAI:
             f"请在 .env 里填写 {conf['key_env']}=你的key"
         )
 
-    model = os.getenv("LLM_MODEL", "").strip() or conf["default_model"]
     return ChatOpenAI(
-        model=model,
+        model=settings.llm_model,
         api_key=api_key,
         base_url=conf["base_url"],
         temperature=temperature,

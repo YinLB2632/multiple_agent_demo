@@ -16,15 +16,16 @@ CLARIFY_QUESTIONS_PROMPT = """你是一位资深产品需求分析师，擅长�
 一份合格 PRD 需要明确：目标用户是谁、要解决什么核心痛点、
 关键使用场景、平台形态（App/网页/小程序等）、以及硬性约束（预算/时间/合规）。
 
-请只输出一个 JSON 对象，不要有任何多余文字，格式如下：
+请只输出一个 JSON 对象，不要有任何多余文字：
 {{
-  "enough": true 或 false,
-  "questions": ["问题1", "问题2", "问题3"]
+  "enough": true,
+  "questions": []
 }}
 
 规则：
+- enough 只能是 JSON 布尔值 true 或 false，不要写中文或字符串。
 - 如果信息已经足够，enough 设为 true，questions 给空数组 []。
-- 如果不够，enough 设为 false，最多提 3 个问题，挑最关键的问。
+- 如果不够，enough 设为 false，questions 给最多 3 个最关键的问题。
 - 问题要具体、好回答，用大白话，别用行业黑话。
 - 已经问过或已知的内容，绝不重复问。
 """

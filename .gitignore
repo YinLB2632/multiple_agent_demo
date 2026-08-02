@@ -3,14 +3,31 @@
 venv/
 
 # 密钥（绝不能提交）
-.env
+# .env 的所有变体（.env.local / .env.production / .env.test 等）都忽略，
+# 只保留 .env.example，方便其他人知道需要填哪些变量。
+.env*
+!.env.example
 
-# Python 缓存
+# 私钥 / 证书（一旦提交就可能永久泄漏，所以统一忽略）
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python 缓存与类型检查产物
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # 编辑器
 .vscode/
 .idea/
+
+# OS 元数据（提交后很难从历史里清掉）
+.DS_Store
+Thumbs.db

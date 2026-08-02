@@ -81,7 +81,11 @@ def confirm_brief(state: PRDState) -> PRDState:
     """
     decision = interrupt({"type": "confirm_brief", "brief": state.get("brief", "")})
     decision = decision or {}
-    final_brief = (decision.get("brief") or state.get("brief", "")).strip()
+    # 不能用 or 兜底：用户在关口把简报清空成 "" 也是一次有效编辑，
+    # or 会把这个空字符串当成"没传"，静默回退到旧值，用户的清空操作就丢了。
+    # 只有 brief 这个键真的不存在（None）时，才回退到旧的 state["brief"]。
+    raw_brief = decision.get("brief")
+    final_brief = (raw_brief if raw_brief is not None else state.get("brief", "")).strip()
     return {
         "brief": final_brief,
         "brief_confirmed": True,
@@ -91,11 +95,20 @@ def confirm_brief(state: PRDState) -> PRDState:
 
 # ---------- 条件路由 ----------
 
-def route_after_clarify(state: PRDState) -> Literal["collect_answers", "make_brief"]:
-    """信息够了去整理简报，不够就去问用户。"""
-    if state.get("clarify_enough") or not state.get("pending_questions"):
+def route_after_clarify(
+    state: PRDState,
+) -> Literal["collect_answers", "make_brief", "clarify_generate"]:
+    """信息够了去整理简报，不够就去问用户。
+
+    注意：clarify_enough=False 且 pending_questions 为空，代表模型本轮输出异常
+    （既不是"够了"也没给出问题），必须回到 clarify_generate 重新生成，
+    不能当成"信息已足够"直接放过去——那样会跳过用户本该回答的一轮。
+    """
+    if state.get("clarify_enough"):
         return "make_brief"
-    return "collect_answers"
+    if state.get("pending_questions"):
+        return "collect_answers"
+    return "clarify_generate"
 
 
 def route_after_review(state: PRDState) -> Literal["write_prd", END]:
@@ -126,7 +139,7 @@ def build_graph():
     g.add_conditional_edges(
         "clarify_generate",
         route_after_clarify,
-        ["collect_answers", "make_brief"],
+        ["collect_answers", "make_brief", "clarify_generate"],
     )
     g.add_edge("collect_answers", "clarify_generate")  # 回答后再判断是否够
     g.add_edge("make_brief", "confirm_brief")
