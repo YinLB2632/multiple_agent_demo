@@ -6,7 +6,7 @@
 """
 import pytest
 
-from config import load_settings, build_llm
+from config import load_settings, build_llm, build_fallback_llm
 from graph import route_after_clarify, route_after_review
 from langgraph.graph import END
 
@@ -19,6 +19,10 @@ ALL_CONFIG_ENVS = [
     "CUSTOM_BASE_URL", "CUSTOM_API_KEY",
     "DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY", "ZHIPU_API_KEY",
     "MOONSHOT_API_KEY", "OPENAI_API_KEY",
+    "REVIEWER_LLM_PROVIDER", "REVIEWER_LLM_MODEL",
+    "REVIEWER_CUSTOM_BASE_URL", "REVIEWER_CUSTOM_API_KEY",
+    "FALLBACK_LLM_PROVIDER", "FALLBACK_LLM_MODEL",
+    "FALLBACK_CUSTOM_BASE_URL", "FALLBACK_CUSTOM_API_KEY",
 ]
 
 
@@ -116,6 +120,51 @@ def test_unknown_search_provider_raises(monkeypatch):
     # 新增：非法 SEARCH_PROVIDER 应在 load_settings 就报错
     monkeypatch.setenv("SEARCH_PROVIDER", "bing")
     with pytest.raises(ValueError, match="SEARCH_PROVIDER"):
+        load_settings()
+
+
+# ---------- 备用模型（降级）----------
+
+def test_fallback_not_configured_returns_none(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-main")
+    # 未配置 FALLBACK_LLM_PROVIDER 时，build_fallback_llm 必须返回 None，
+    # 代表"不启用降级"，不能凭空造出一个客户端。
+    assert build_fallback_llm() is None
+
+
+def test_fallback_configured_builds_client(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-main")
+    monkeypatch.setenv("FALLBACK_LLM_PROVIDER", "zhipu")
+    monkeypatch.setenv("ZHIPU_API_KEY", "sk-fallback")
+    from langchain_openai import ChatOpenAI
+    llm = build_fallback_llm()
+    assert isinstance(llm, ChatOpenAI)
+
+
+def test_fallback_unknown_provider_raises(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-main")
+    monkeypatch.setenv("FALLBACK_LLM_PROVIDER", "火星模型")
+    with pytest.raises(ValueError, match="FALLBACK_LLM_PROVIDER"):
+        load_settings()
+
+
+def test_fallback_missing_key_raises_when_built(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-main")
+    monkeypatch.setenv("FALLBACK_LLM_PROVIDER", "zhipu")
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="ZHIPU_API_KEY"):
+        build_fallback_llm()
+
+
+def test_fallback_custom_requires_model(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-main")
+    monkeypatch.setenv("FALLBACK_LLM_PROVIDER", "custom")
+    with pytest.raises(ValueError, match="FALLBACK_LLM_MODEL"):
         load_settings()
 
 

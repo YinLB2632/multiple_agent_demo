@@ -11,7 +11,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from config import build_llm
+from config import build_llm, build_fallback_llm
 
 
 def extract_text(content: Any) -> str:
@@ -38,10 +38,24 @@ def extract_text(content: Any) -> str:
     return str(content)
 
 
-def call_llm(prompt: str, temperature: float = 0.4) -> str:
-    """发一条 prompt，拿回纯文本回复。"""
-    llm = build_llm(temperature=temperature)
-    resp = llm.invoke([HumanMessage(content=prompt)])
+def call_llm(prompt: str, temperature: float = 0.4, role: str = "default") -> str:
+    """发一条 prompt，拿回纯文本回复。
+
+    role="reviewer" 时，若用户配置了独立的评审模型（REVIEWER_LLM_PROVIDER），
+    会走那个模型；未配置则和其它角色一样用主模型，行为不变。
+
+    主模型（或评审模型）调用失败时，若用户配置了 FALLBACK_LLM_PROVIDER，
+    自动切过去重试一次；没配置降级，或降级也失败，原样把异常抛出去——
+    不悄悄吞掉错误，让上层（如 app.py 的兜底提示）能感知到真的出问题了。
+    """
+    llm = build_llm(temperature=temperature, role=role)
+    try:
+        resp = llm.invoke([HumanMessage(content=prompt)])
+    except Exception:
+        fallback_llm = build_fallback_llm(temperature=temperature)
+        if fallback_llm is None:
+            raise
+        resp = fallback_llm.invoke([HumanMessage(content=prompt)])
     return extract_text(resp.content)
 
 

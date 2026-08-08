@@ -28,6 +28,9 @@ htmlcov/
 .vscode/
 .idea/
 
+# Playwright MCP 工具产生的临时数据
+.playwright-mcp/
+
 # OS 元数据（提交后很难从历史里清掉）
 .DS_Store
 Thumbs.db
